@@ -19,6 +19,7 @@ sys.path.append("%s/GPT_SoVITS" % (script_dir))
 from Loader import get_gpt_weights, get_sovits_weights, Gpt, Sovits
 from download import check_pretrained_models, download_model
 from TextPreprocessor import get_phones_and_bert, cut_text
+from GPT_SoVITS.text import _symbol_to_id_v2
 from GPT_SoVITS.feature_extractor import cnhubert, cnroberta
 from GPT_SoVITS.eres2net.sv import SV
 from GPT_SoVITS.SoVITS.module.mel_processing import spectrogram_torch
@@ -177,7 +178,7 @@ class TTS:
         )
 
         logging.debug("Running SoVITS inference (Semantic-to-Waveform)...")
-        phones2_tensor = torch.LongTensor(phones2).to(tts_config.device).unsqueeze(0)
+        phones2_tensor = torch.LongTensor([_symbol_to_id_v2[","]]+phones2).to(tts_config.device).unsqueeze(0)
         phones2_lengths = torch.LongTensor([phones2_tensor.size(-1)]).to(tts_config.device)
         encoded_text, text_mask = vq_model.enc_p.text_encode(phones2_tensor, phones2_lengths)
 
@@ -202,8 +203,7 @@ class TTS:
         results = {
             "audio_data": audio,
             "samplerate": samplerate,
-            "start_s": 0.0,
-            "end_s": audio_len_s,
+            "audio_len_s": audio_len_s,
             "subtitles": subtitles,
         }
 
@@ -225,6 +225,7 @@ class TTS:
         stream_mode: str = "token" or "sentence",
         stream_chunk: int = 25,
         overlap_len: int = 10,
+        boost_first_chunk: bool = True,
         top_k: int = 15,
         top_p: float = 1.0,
         temperature: float = 1.0,
@@ -286,7 +287,7 @@ class TTS:
             bert = torch.cat([bert1, bert2], dim=1)
             bert = bert.to(tts_config.device).unsqueeze(0)
 
-            phones2_tensor = torch.LongTensor(phones2).to(tts_config.device).unsqueeze(0)
+            phones2_tensor = torch.LongTensor([_symbol_to_id_v2[","]]+phones2).to(tts_config.device).unsqueeze(0)
             phones2_lengths = torch.LongTensor([phones2_tensor.size(-1)]).to(tts_config.device)
             encoded_text, text_mask = vq_model.enc_p.text_encode(phones2_tensor, phones2_lengths)
 
@@ -301,6 +302,7 @@ class TTS:
                 top_p=top_p,
                 temperature=temperature,
                 stream_chunk=stream_chunk,
+                boost_first_chunk=boost_first_chunk,
             )
 
             last_attn = None
@@ -352,6 +354,7 @@ class TTS:
                 results = {
                     "audio_data": audio,
                     "samplerate": samplerate,
+                    "audio_len_s": audio_len_s,
                     "new_subtitles": new_subtitles,
                 }
 
@@ -408,7 +411,7 @@ class TTS:
         logging.debug("Processing text to phones and BERT features...")
         phones, word2ph, _, _ = get_phones_and_bert(prompt_audio_text, prompt_audio_language)
 
-        phones_tensor = torch.LongTensor(phones).to(tts_config.device).unsqueeze(0)
+        phones_tensor = torch.LongTensor([_symbol_to_id_v2[","]]+phones).to(tts_config.device).unsqueeze(0)
         phones_lengths = torch.LongTensor([phones_tensor.size(-1)]).to(tts_config.device)
         encoded_text, text_mask = vq_model.enc_p.text_encode(phones_tensor, phones_lengths)
 
@@ -434,8 +437,7 @@ class TTS:
         results = {
             "audio_data": audio,
             "samplerate": samplerate,
-            "start_s": 0.0,
-            "end_s": audio_len_s,
+            "audio_len_s": audio_len_s,
             "subtitles": subtitles,
         }
 
