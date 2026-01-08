@@ -378,6 +378,7 @@ class Text2SemanticDecoder(nn.Module):
         temperature: float = 1.0,
         repetition_penalty: float = 1.35,
         stream_chunk: int = 25,
+        boost_first_chunk: bool = True,
     ):
         x = self.ar_text_embedding(x)
         x = x + self.bert_proj(bert_feature.transpose(1, 2))
@@ -460,10 +461,11 @@ class Text2SemanticDecoder(nn.Module):
                     yield pre_chunk, False
                 pre_chunk = y[:, -idx:].unsqueeze(0)
 
-                if first_chunk:
-                    first_chunk = False
-                    yield pre_chunk, False
-                    pre_chunk = None
+                if boost_first_chunk:
+                    if first_chunk:
+                        first_chunk = False
+                        yield pre_chunk, False
+                        pre_chunk = None
 
             y_emb = self.ar_audio_embedding(y[:, -1:])
             xy_pos = y_emb * self.ar_audio_position.x_scale + pe_cache[:, idx:idx+1]
