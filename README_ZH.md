@@ -38,4 +38,42 @@
   <img src="https://user-images.githubusercontent.com/73097560/115834477-dbab4500-a447-11eb-908a-139a6edaec5c.gif">
 </div>
 
-## 作者前言
+## 前言 (Preface)
+
+本项目诞生的初衷源于对极致性能的追求。我在原版 GPT-SoVITS 的使用过程中，受限于 RTX 3050 (Laptop) 的算力瓶颈，推理延迟往往难以满足实时交互的需求。
+
+为了打破这一限制，**GPT-SoVITS-RT** 应运而生，它是基于 **V2Pro** 模型开发的推理后端。通过一些深度优化技术，本项目成功在低显存环境下实现了毫秒级的实时响应。
+
+除了性能上的飞跃，**GPT-SoVITS-RT** 还加入了音字精准对齐与音频音色迁移等特色功能。
+
+为了便于开发者集成，**GPT-SoVITS-RT** 大幅精简了代码架构，且体积被压缩至 **800MB**。
+
+## 性能对比 (Performance)
+
+> [!NOTE]
+> **测试环境**：单卡 NVIDIA GeForce RTX 3050 (Laptop)
+
+| 推理后端 (Backend)| 设置 (Settings) | 首包延迟 (TTFT) | 实时率 (RTF) | 显存 (VRAM) | 提升幅度 |
+| :--- | :--- | :---: | :---: | :---: | :--- |
+| **Original** | `streaming_mode=3` | 436 ms | 0.381 | 1.6 GB | - |
+| **RT Version** | `Flash_Attn=Off` | 150 ms | 0.125 | **0.8 GB** | ⚡ **2.9x** Speed |
+| **RT Version** | `Flash_Attn=On` | **133 ms** | **0.108** | **0.8 GB** | 🔥 **3.3x** Speed |
+
+可以看到，**GPT-SoVITS-RT** 实现了 **3x** 速度提升，且显存占用 **减半**！🚀
+<br>
+
+## 环境准备 (Prerequisites)
+
+- **Anaconda**
+- **CUDA Toolkit**
+- **Microsoft Visual C++**
+
+## 快速开始 (Quick Start)
+
+```bash
+conda create -n gsv-rt python=3.11
+conda activate gsv-rt
+conda install "ffmpeg"
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+pip install -r requirements.txt
+```
