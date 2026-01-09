@@ -64,7 +64,6 @@ As shown above, **GPT-SoVITS-RT** delivers a **3x ~ 4x** speed improvement while
 
 ## Prerequisites
 
-Before getting started, ensure you have the following installed:
 - **Anaconda**
 - **CUDA Toolkit**
 - **Microsoft Visual C++ Build Tools**
@@ -74,7 +73,7 @@ Before getting started, ensure you have the following installed:
 ### Installation
 
 > [!IMPORTANT]
-> Make sure the project path contains **only English characters** (no spaces or special symbols recommended).
+> Make sure the project path contains **only English characters**.
 
 ```bash
 git clone https://github.com/chinokikiss/GPT-SoVITS-RT
