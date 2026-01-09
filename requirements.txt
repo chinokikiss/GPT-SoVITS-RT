@@ -8,6 +8,7 @@ sounddevice
 transformers
 cn2an
 pypinyin
+opencc
 jieba_fast
 wordsegment
 onnxruntime; platform_machine == "aarch64" or platform_machine == "arm64"
@@ -15,7 +16,6 @@ onnxruntime-gpu; platform_machine == "x86_64" or platform_machine == "AMD64"
 torchcodec
 pyopenjtalk>=0.4.1
 g2p_en
-ko_pron
 g2pk2
 eunjeon
 ToJyutping
