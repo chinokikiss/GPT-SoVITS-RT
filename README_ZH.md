@@ -24,6 +24,18 @@
   </p>
 
   <p>
-    [ <a href="README.md">English</a> | <a href="README_ZH.md">中文</a> ]
+    <a href="README.md">
+      <img src="https://img.shields.io/badge/English-66ccff?style=flat-square&logo=github&logoColor=white" alt="English">
+    </a>
+    &nbsp;
+    <a href="README_ZH.md">
+      <img src="https://img.shields.io/badge/简体中文-ff99cc?style=flat-square&logo=github&logoColor=white" alt="Chinese">
+    </a>
   </p>
 </div>
+
+<div align="center">
+  <img src="https://user-images.githubusercontent.com/73097560/115834477-dbab4500-a447-11eb-908a-139a6edaec5c.gif">
+</div>
+
+## 作者前言
