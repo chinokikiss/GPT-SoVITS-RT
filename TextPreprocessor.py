@@ -104,3 +104,36 @@ def get_phones_and_bert(text, language):
     norm_text = "".join(norm_text_list)
 
     return phones, word2ph, bert, norm_text
+
+
+def sub2text_index(subtitles, norm_text: str, orig_text: str):
+    idx = 0
+    sub_norm_idx = []
+    for subtitle in subtitles:
+        text = subtitle['text']
+        idx = norm_text.find(text, idx)
+        sub_norm_idx.append({"start":idx, "end":idx+len(text)-1})
+    
+    idx = 0
+    norm_orig_idx = []
+    for chr in norm_text:
+        i = orig_text.find(chr, idx)
+        if i != -1: idx = i
+        norm_orig_idx.append(i)
+    
+    last_i = 0
+    last_orig_idx = None
+    for i, orig_idx in enumerate(norm_orig_idx+[len(orig_text)]):
+        if orig_idx == -1 and last_orig_idx != -1:
+            last_i = i
+        elif orig_idx != -1 and last_orig_idx == -1:
+            for j in range(last_i, i):
+                norm_orig_idx[j] = int((j-last_i+1) * (orig_idx-1) / (i-last_i))
+        last_orig_idx = orig_idx
+    
+    for i, norm_idx in enumerate(sub_norm_idx):
+        orig_idx_start, orig_idx_end = norm_orig_idx[norm_idx["start"]], norm_orig_idx[norm_idx["end"]]
+        subtitles[i]["orig_idx_start"] = orig_idx_start
+        subtitles[i]["orig_idx_end"] = orig_idx_end + 1
+    
+    return subtitles

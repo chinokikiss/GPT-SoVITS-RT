@@ -86,7 +86,11 @@ def get_gpt_weights(gpt_path):
         for k, v in dict_s1["weight"].items()
     }
 
-    t2s_model = Text2SemanticDecoder(dict_s1)
+    if tts_config.use_flash_attn:
+        from GPT_SoVITS.GPT.t2s_model_flash_attn import Text2SemanticDecoder as Text2SemanticDecoder_flash_attn
+        t2s_model = Text2SemanticDecoder_flash_attn(dict_s1)
+    else:
+        t2s_model = Text2SemanticDecoder(dict_s1)
     t2s_model.load_state_dict(dict_s1["weight"])
     if tts_config.is_half == True:
         t2s_model = t2s_model.half()

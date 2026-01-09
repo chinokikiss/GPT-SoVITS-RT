@@ -10,6 +10,7 @@ logging.basicConfig(
 import librosa
 import torchaudio
 import numpy as np
+from torch.nn import functional as F
 
 script_path = os.path.abspath(__file__)
 script_dir = os.path.dirname(script_path)
@@ -18,7 +19,7 @@ sys.path.append("%s/GPT_SoVITS" % (script_dir))
 
 from Loader import get_gpt_weights, get_sovits_weights, Gpt, Sovits
 from download import check_pretrained_models, download_model
-from TextPreprocessor import get_phones_and_bert, cut_text
+from TextPreprocessor import get_phones_and_bert, cut_text, sub2text_index
 from GPT_SoVITS.text import _symbol_to_id_v2
 from GPT_SoVITS.feature_extractor import cnhubert, cnroberta
 from GPT_SoVITS.eres2net.sv import SV
@@ -33,6 +34,7 @@ class TTS:
         sovits_cache: list[int] = [50, 300],
         device: str = None,
         is_half: bool = None,
+        use_flash_attn: bool = False,
         use_g2pw: bool = False,
         use_bert: bool = False,
     ):
@@ -42,6 +44,7 @@ class TTS:
             tts_config.is_half = is_half
             tts_config.dtype = torch.float16 if is_half else torch.float32
 
+        tts_config.use_flash_attn = use_flash_attn
         tts_config.gpt_cache = gpt_cache
         tts_config.sovits_cache = sovits_cache
 
@@ -161,7 +164,7 @@ class TTS:
         vq_model = sovits.vq_model
 
         logging.debug("Processing text to phones and BERT features...")
-        phones2, word2ph, bert2, _ = get_phones_and_bert(text, text_language)
+        phones2, word2ph, bert2, norm_text = get_phones_and_bert(text, text_language)
         all_phoneme_ids = torch.LongTensor(phones1 + phones2).to(tts_config.device).unsqueeze(0)
         bert = torch.cat([bert1, bert2], dim=1)
         bert = bert.to(tts_config.device).unsqueeze(0)
@@ -178,6 +181,8 @@ class TTS:
         )
 
         logging.debug("Running SoVITS inference (Semantic-to-Waveform)...")
+        word2ph["word"].append("")
+        word2ph["ph"].append(1)
         phones2_tensor = torch.LongTensor([_symbol_to_id_v2[","]]+phones2).to(tts_config.device).unsqueeze(0)
         phones2_lengths = torch.LongTensor([phones2_tensor.size(-1)]).to(tts_config.device)
         encoded_text, text_mask = vq_model.enc_p.text_encode(phones2_tensor, phones2_lengths)
@@ -190,15 +195,17 @@ class TTS:
         attn = attn.cpu().numpy()
         assign, _ = self.viterbi_monotonic(attn)
         subtitles = self.get_subtitles(word2ph, assign, speed)
+        subtitles = sub2text_index(subtitles, norm_text, text)
+
+        samplerate = vq_model.samples_per_frame * vq_model.hz
 
         max_audio = np.abs(audio).max()
         if max_audio > 1:
             audio = audio / max_audio
+        audio = np.concatenate([audio, np.zeros((int(0.2*samplerate),), dtype=audio.dtype)]) 
         audio = audio.astype(np.float32)
-
-        samplerate = vq_model.samples_per_frame * vq_model.hz
         
-        audio_len_s = float(len(audio)) / float(samplerate)
+        audio_len_s = len(audio) / samplerate
 
         results = {
             "audio_data": audio,
@@ -225,7 +232,7 @@ class TTS:
         stream_mode: str = "token" or "sentence",
         stream_chunk: int = 25,
         overlap_len: int = 10,
-        boost_first_chunk: bool = True,
+        boost_first_chunk: bool = False,
         top_k: int = 15,
         top_p: float = 1.0,
         temperature: float = 1.0,
@@ -282,11 +289,13 @@ class TTS:
         text_cuts = cut_text(text, cut_punds, cut_minlen)
         for i, text_cut in enumerate(text_cuts):
             logging.info(f"Processing segment {i+1}/{len(text_cuts)}: '{text_cut[:20]}...'")
-            phones2, word2ph, bert2, _ = get_phones_and_bert(text_cut, text_language)
+            phones2, word2ph, bert2, norm_text = get_phones_and_bert(text_cut, text_language)
             all_phoneme_ids = torch.LongTensor(phones1 + phones2).to(tts_config.device).unsqueeze(0)
             bert = torch.cat([bert1, bert2], dim=1)
             bert = bert.to(tts_config.device).unsqueeze(0)
 
+            word2ph["word"].append("")
+            word2ph["ph"].append(1)
             phones2_tensor = torch.LongTensor([_symbol_to_id_v2[","]]+phones2).to(tts_config.device).unsqueeze(0)
             phones2_lengths = torch.LongTensor([phones2_tensor.size(-1)]).to(tts_config.device)
             encoded_text, text_mask = vq_model.enc_p.text_encode(phones2_tensor, phones2_lengths)
@@ -322,10 +331,8 @@ class TTS:
                 )
 
                 if not last_overlap_audio is None:
-                    alpha = torch.linspace(0, 1, overlap_samples, device=tts_config.device, dtype=tts_config.dtype).view(1, 1, -1)
-                    overlap_audio = audio[:, :, :overlap_samples]
-                    overlap_audio_faded = last_overlap_audio * (1 - alpha) + overlap_audio * alpha
-                    audio = torch.cat([overlap_audio_faded, audio[:, :, overlap_samples:]], dim=-1)
+                    audio, offset = self.sola_algorithm(last_overlap_audio, audio, overlap_samples)
+                    last_end_s -= float(offset) / samplerate
                 last_overlap_audio = audio[:, :, -overlap_samples:]
 
                 if not is_final:
@@ -340,6 +347,7 @@ class TTS:
 
                 assign, last_attn = self.viterbi_monotonic(attn, last_N_back=False)
                 subtitles = self.get_subtitles(word2ph, assign, last_end_s=last_end_s)
+                subtitles = sub2text_index(subtitles, norm_text, text_cut)
                 new_subtitles = subtitles[last_subtitles_end:]
                 last_subtitles_end = len(subtitles)-1
                 if not is_final and new_subtitles:
@@ -349,9 +357,10 @@ class TTS:
                     audio = np.concatenate([np.zeros((int(cut_mute*samplerate),), dtype=audio.dtype), audio])
                 audio = audio.astype(np.float32)
 
-                audio_len_s += float(len(audio)) / float(samplerate)
+                audio_len_s += len(audio) / samplerate
 
                 results = {
+                    "segment_text": text_cut,
                     "audio_data": audio,
                     "samplerate": samplerate,
                     "audio_len_s": audio_len_s,
@@ -409,8 +418,10 @@ class TTS:
         self.empty_cache()
 
         logging.debug("Processing text to phones and BERT features...")
-        phones, word2ph, _, _ = get_phones_and_bert(prompt_audio_text, prompt_audio_language)
+        phones, word2ph, _, norm_text = get_phones_and_bert(prompt_audio_text, prompt_audio_language)
 
+        word2ph["word"].append("")
+        word2ph["ph"].append(1)
         phones_tensor = torch.LongTensor([_symbol_to_id_v2[","]]+phones).to(tts_config.device).unsqueeze(0)
         phones_lengths = torch.LongTensor([phones_tensor.size(-1)]).to(tts_config.device)
         encoded_text, text_mask = vq_model.enc_p.text_encode(phones_tensor, phones_lengths)
@@ -424,6 +435,7 @@ class TTS:
         attn = attn.cpu().numpy()
         assign, _ = self.viterbi_monotonic(attn)
         subtitles = self.get_subtitles(word2ph, assign, speed)
+        subtitles = sub2text_index(subtitles, norm_text, prompt_audio_text)
 
         max_audio = np.abs(audio).max()
         if max_audio > 1:
@@ -432,7 +444,7 @@ class TTS:
 
         samplerate = vq_model.samples_per_frame * vq_model.hz
         
-        audio_len_s = float(len(audio)) / float(samplerate)
+        audio_len_s = len(audio) / samplerate
 
         results = {
             "audio_data": audio,
@@ -614,6 +626,23 @@ class TTS:
         spec = spec.to(tts_config.dtype)
         audio = self.resample(audio, sr1, 16000)
         return spec, audio
+    
+    def sola_algorithm(self, f1_overlap, f2, overlap_len, search_len: int = 320):
+        query = f1_overlap
+        key = f2[:, :, :overlap_len + search_len]
+
+        corr = F.conv1d(key, query) 
+        ones_kernel = torch.ones_like(query)
+        energy = F.conv1d(key**2, ones_kernel) + 1e-8
+        norm_corr = corr / torch.sqrt(energy)
+        offset = norm_corr.argmax(dim=-1)
+        
+        f2_aligned = f2[:, :, offset.item():]
+        alpha = torch.linspace(0, 1, overlap_len, device=tts_config.device, dtype=tts_config.dtype).view(1, 1, -1)
+        f2_overlap = f2_aligned[:, :, :overlap_len]
+        f_faded = f1_overlap * (1 - alpha) + f2_overlap * alpha
+        f2_real = torch.cat([f_faded, f2_aligned[:, :, overlap_len:]], dim=-1)
+        return f2_real, offset
     
     def get_subtitles(self, word2ph, assign, speed = 1, last_end_s = 0):
         frame_time = 0.02 / max(speed, 1e-6) # 50HZ -> 0.02s
