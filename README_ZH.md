@@ -116,6 +116,11 @@ sd.play(res["audio_data"], res["samplerate"], blocking=True)
 
 #### 2. 音色迁移
 ```python
+import sounddevice as sd
+from GPT_SoVITS_RT.TTS import TTS
+
+tts = TTS()
+
 res = tts.infer_vc(
     spk_audio_path="拉菲\日配.mp3",
     prompt_audio_path="anan\0102Adv17_AnAn001.ogg",
@@ -132,6 +137,10 @@ sd.play(res["audio_data"], res["samplerate"], blocking=True)
 ```python
 import queue
 import numpy as np
+import sounddevice as sd
+from GPT_SoVITS_RT.TTS import TTS
+
+tts = TTS()
 
 class AudioStreamer:
     def __init__(self):
