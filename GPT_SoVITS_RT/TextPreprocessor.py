@@ -106,7 +106,7 @@ def get_phones_and_bert(text, language):
     return phones, word2ph, bert, norm_text
 
 
-def sub2text_index(subtitles, norm_text: str, orig_text: str):
+def sub2text_index(subtitles, norm_text: str, orig_text: str, start_idx: int = 0):
     idx = 0
     sub_norm_idx = []
     for subtitle in subtitles:
@@ -114,7 +114,7 @@ def sub2text_index(subtitles, norm_text: str, orig_text: str):
         idx = norm_text.find(text, idx)
         sub_norm_idx.append({"start":idx, "end":idx+len(text)-1})
     
-    idx = 0
+    idx = start_idx
     norm_orig_idx = []
     for chr in norm_text:
         i = orig_text.find(chr, idx)

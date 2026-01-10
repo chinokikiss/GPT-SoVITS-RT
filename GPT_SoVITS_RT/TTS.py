@@ -168,7 +168,10 @@ class TTS:
                 - "subtitles" (list): Subtitle data corresponding to the generated audio.
         """
 
-        logging.info(f"Starting inference for text: '{text[:20]}...'")
+        if len(text) > 20:
+            logging.info(f"Starting inference for text: '{text[:20]}...'")
+        else:
+            logging.info(f"Starting inference for text: '{text}'")
         prompt_audio_language = self.dict_language[prompt_audio_language]
         text_language = self.dict_language[text_language]
 
@@ -224,9 +227,7 @@ class TTS:
         )
 
         logging.debug("Running SoVITS inference (Semantic-to-Waveform)...")
-        word2ph["word"].append("")
-        word2ph["ph"].append(1)
-        phones2_tensor = torch.LongTensor([_symbol_to_id_v2[","]]+phones2).to(tts_config.device).unsqueeze(0)
+        phones2_tensor = torch.LongTensor(phones2).to(tts_config.device).unsqueeze(0)
         phones2_lengths = torch.LongTensor([phones2_tensor.size(-1)]).to(tts_config.device)
         encoded_text, text_mask = vq_model.enc_p.text_encode(phones2_tensor, phones2_lengths)
 
@@ -273,7 +274,7 @@ class TTS:
         cut_minlen: int = 10,
         cut_mute: int = 0.2,
         stream_mode: str = "token" or "sentence",
-        stream_chunk: int = 20,
+        stream_chunk: int = 25,
         overlap_len: int = 10,
         boost_first_chunk: bool = False,
         top_k: int = 15,
@@ -283,6 +284,7 @@ class TTS:
         gpt_cache: int = -1,
         gpt_model: str = None,
         sovits_model: str = None,
+        debug: str = True,
     ):
         """
         Performs streaming Text-to-Speech (TTS) inference, yielding audio chunks in real-time.
@@ -308,6 +310,7 @@ class TTS:
             gpt_cache (int, optional): The size of the pre-allocated key-value (KV) cache to use for the GPT model, helping to speed up inference.
             gpt_model (str, optional): The GPT model to use for the inference.
             sovits_model (str, optional): The SoVITS model to use for the inference.
+            debug (bool, optional): When set to “False”, certain outputs can be suppressed.
 
         Yields:
             dict: A dictionary representing a chunk of the generated audio stream:
@@ -318,7 +321,10 @@ class TTS:
                 - "new_subtitles" (list): Subtitle data specific to this chunk.
         """
 
-        logging.info(f"Starting Stream inference for text: '{text[:20]}...'")
+        if len(text) > 20:
+            logging.info(f"Starting Stream inference for text: '{text[:20]}...'")
+        else:
+            logging.info(f"Starting Stream inference for text: '{text}'")
         if stream_mode == "sentence": stream_chunk = 10000
         
         prompt_audio_language = self.dict_language[prompt_audio_language]
@@ -359,21 +365,20 @@ class TTS:
         vq_model = sovits.vq_model
         overlap_samples = overlap_len * vq_model.samples_per_frame
 
+        cur_text_l = 0
         audio_len_s = 0
         last_end_s = 0
-        first_cut = True
 
         text_cuts = cut_text(text, cut_punds, cut_minlen)
         for i, text_cut in enumerate(text_cuts):
-            logging.info(f"Processing segment {i+1}/{len(text_cuts)}: '{text_cut[:20]}...'")
+            if debug: logging.info(f"Processing segment {i+1}/{len(text_cuts)}: '{text_cut}'")
+
             phones2, word2ph, bert2, norm_text = get_phones_and_bert(text_cut, text_language)
             all_phoneme_ids = torch.LongTensor(phones1 + phones2).to(tts_config.device).unsqueeze(0)
             bert = torch.cat([bert1, bert2], dim=1)
             bert = bert.to(tts_config.device).unsqueeze(0)
 
-            word2ph["word"].append("")
-            word2ph["ph"].append(1)
-            phones2_tensor = torch.LongTensor([_symbol_to_id_v2[","]]+phones2).to(tts_config.device).unsqueeze(0)
+            phones2_tensor = torch.LongTensor(phones2).to(tts_config.device).unsqueeze(0)
             phones2_lengths = torch.LongTensor([phones2_tensor.size(-1)]).to(tts_config.device)
             encoded_text, text_mask = vq_model.enc_p.text_encode(phones2_tensor, phones2_lengths)
 
@@ -389,6 +394,7 @@ class TTS:
                 temperature=temperature,
                 stream_chunk=stream_chunk,
                 boost_first_chunk=boost_first_chunk,
+                debug=debug,
             )
 
             last_attn = None
@@ -424,20 +430,23 @@ class TTS:
 
                 assign, last_attn = self.viterbi_monotonic(attn, last_N_back=False)
                 subtitles = self.get_subtitles(word2ph, assign, last_end_s=last_end_s)
-                subtitles = sub2text_index(subtitles, norm_text, text_cut)
+                subtitles = sub2text_index(subtitles, norm_text, text, start_idx=cur_text_l)
                 new_subtitles = subtitles[last_subtitles_end:]
                 last_subtitles_end = len(subtitles)-1
                 if not is_final and new_subtitles:
                     new_subtitles[-1]['end_s'] = None
                 
-                if not first_cut and chunk_idx == 0:
-                    audio = np.concatenate([np.zeros((int(cut_mute*samplerate),), dtype=audio.dtype), audio])
+                if is_final:
+                    audio = np.concatenate([audio, np.zeros((int(cut_mute*samplerate),), dtype=audio.dtype)])
+                    if new_subtitles:
+                        new_subtitles[-1]['end_s'] += cut_mute
+                        last_end_s = new_subtitles[-1]['end_s']
+
                 audio = audio.astype(np.float32)
 
                 audio_len_s += len(audio) / samplerate
 
                 results = {
-                    "segment_text": text_cut,
                     "audio_data": audio,
                     "samplerate": samplerate,
                     "audio_len_s": audio_len_s,
@@ -447,12 +456,10 @@ class TTS:
                 yield results
                 chunk_idx += 1
             
-            if new_subtitles:
-                last_end_s = new_subtitles[-1]['end_s'] + cut_mute
-            first_cut = False
             vq_model.enc_p.y_overlap = None
+            cur_text_l += len(text_cut)
         
-        logging.info(f"Stream inference complete. Generated {audio_len_s:.2f}s of audio.")
+        if debug: logging.info(f"Stream inference complete. Generated {audio_len_s:.2f}s of audio.")
     
     @torch.inference_mode()
     def infer_vc(
@@ -517,9 +524,7 @@ class TTS:
         logging.debug("Processing text to phones and BERT features...")
         phones, word2ph, _, norm_text = get_phones_and_bert(prompt_audio_text, prompt_audio_language)
 
-        word2ph["word"].append("")
-        word2ph["ph"].append(1)
-        phones_tensor = torch.LongTensor([_symbol_to_id_v2[","]]+phones).to(tts_config.device).unsqueeze(0)
+        phones_tensor = torch.LongTensor(phones).to(tts_config.device).unsqueeze(0)
         phones_lengths = torch.LongTensor([phones_tensor.size(-1)]).to(tts_config.device)
         encoded_text, text_mask = vq_model.enc_p.text_encode(phones_tensor, phones_lengths)
 
