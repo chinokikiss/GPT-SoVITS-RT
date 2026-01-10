@@ -103,9 +103,9 @@ from GPT_SoVITS_RT.TTS import TTS
 tts = TTS()
 
 res = tts.infer(
-    spk_audio_path="拉菲\日配.mp3",
-    prompt_audio_path="anan\0102Adv17_AnAn001.ogg",
-    prompt_audio_text="ミリアは……本当に刺されているのか？",
+    spk_audio_path="examples\laffey.mp3",
+    prompt_audio_path="examples\AnAn.ogg",
+    prompt_audio_text="ちが……ちがう。レイア、貴様は間違っている。",
     prompt_audio_language="ja",
     text="へぇー、ここまでしてくれるんですね",
     text_language="auto",
@@ -124,9 +124,9 @@ from GPT_SoVITS_RT.TTS import TTS
 tts = TTS()
 
 res = tts.infer_vc(
-    spk_audio_path="拉菲\日配.mp3",
-    prompt_audio_path="anan\0102Adv17_AnAn001.ogg",
-    prompt_audio_text="ミリアは……本当に刺されているのか？",
+    spk_audio_path="examples\laffey.mp3",
+    prompt_audio_path="examples\AnAn.ogg",
+    prompt_audio_text="ちが……ちがう。レイア、貴様は間違っている。",
     prompt_audio_language="ja",
 )
 
@@ -181,9 +181,9 @@ while True:
     text = input("infer text: ")
 
     generator = tts.infer_stream(
-        spk_audio_path="拉菲\日配.mp3",
-        prompt_audio_path="anan\0102Adv17_AnAn001.ogg",
-        prompt_audio_text="ミリアは……本当に刺されているのか？",
+        spk_audio_path="examples\laffey.mp3",
+        prompt_audio_path="examples\AnAn.ogg",
+        prompt_audio_text="ちが……ちがう。レイア、貴様は間違っている。",
         prompt_audio_language="ja",
         text=text,
         text_language="auto",
