@@ -147,7 +147,7 @@ def g2p(text):
 
     word2ph = {"word":[], "ph":[]}
     char_phonemes = char_phoneme_mapping(text)
-    phoneme_word2ph_alignment(phonemes, [0]*len(char_phonemes), char_phonemes, word2ph)
+    word2ph = phoneme_word2ph_alignment(phonemes, [0]*len(phonemes), char_phonemes, word2ph)
 
     return phonemes, word2ph
 

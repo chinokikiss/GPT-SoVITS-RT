@@ -75,7 +75,8 @@ def preprocess_jap(text, with_prosody=False):
     for i, sentence in enumerate(sentences):
         if re.match(_japanese_characters, sentence):
             if with_prosody:
-                text += pyopenjtalk_g2p_prosody(sentence, word2ph)[1:-1]
+                ph, word2ph = pyopenjtalk_g2p_prosody(sentence, word2ph)
+                text += ph[1:-1]
             else:
                 p = pyopenjtalk.g2p(sentence)
                 text += p.split(" ")
@@ -184,9 +185,9 @@ def pyopenjtalk_g2p_prosody(text, word2ph, drop_unvoiced_vowels=True):
             other_phonemes.append(0)
     
     char_phonemes = char_phoneme_mapping(text)
-    phoneme_word2ph_alignment(phonemes, other_phonemes, char_phonemes, word2ph)
+    word2ph = phoneme_word2ph_alignment(phonemes, other_phonemes, char_phonemes, word2ph)
 
-    return phones
+    return phones, word2ph
 
 
 # Copied from espnet https://github.com/espnet/espnet/blob/master/espnet2/text/phoneme_tokenizer.py
