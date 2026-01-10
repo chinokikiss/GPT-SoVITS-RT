@@ -137,6 +137,6 @@ def phoneme_word2ph_alignment(phonemes, other_phonemes, char_phonemes, word2ph):
     
     if False in flags:
         print(phonemes, char_phonemes)
-        logging.error("The phoneme word2ph cannot be aligned!")
+        logging.warning("The phoneme word2ph cannot be aligned!")
     
     return word2ph

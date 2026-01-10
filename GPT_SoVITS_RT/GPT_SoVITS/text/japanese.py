@@ -103,7 +103,7 @@ def char_phoneme_mapping(text):
     
     for char in text:
         char_phoneme = []
-        if char != 'ー':
+        if char not in ['ー', '々']:
             labels = pyopenjtalk.make_label(pyopenjtalk.run_frontend(char))
             for label in labels:
                 match = re.search(r"\-(.*?)\+", label)
