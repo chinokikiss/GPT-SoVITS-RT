@@ -278,7 +278,7 @@ class TTS:
         stream_mode: str = "token" or "sentence",
         stream_chunk: int = 25,
         overlap_len: int = 10,
-        boost_first_chunk: bool = False,
+        boost_first_chunk: bool = True,
         top_k: int = 15,
         top_p: float = 1.0,
         temperature: float = 1.0,
@@ -396,7 +396,7 @@ class TTS:
                 top_p=top_p,
                 temperature=temperature,
                 stream_chunk=stream_chunk,
-                boost_first_chunk=boost_first_chunk,
+                boost_first_chunk=boost_first_chunk if i == 0 else False,
                 debug=debug,
             )
 
@@ -496,7 +496,7 @@ class TTS:
         """
 
         logging.info(f"Starting VC inference. Prompt audio: {prompt_audio_path}")
-        
+
         prompt_audio_language = self.dict_language[prompt_audio_language]
 
         if sovits_model is None:
